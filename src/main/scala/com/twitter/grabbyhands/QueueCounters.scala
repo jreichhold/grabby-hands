@@ -29,16 +29,17 @@ class QueueCounters() {
   val kestrelGetTimeouts = new AtomicLong()
   val protocolError = new AtomicLong()
   val sendCancelled = new AtomicLong()
+  val recvCancelled = new AtomicLong()
 
   def toMap(): Map[String, Long] = {
     val rv = new HashMap[String, Long]()
-    rv + ("bytesRecv" -> bytesRecv.get)
-    rv + ("bytesSent" -> bytesSent.get)
-    rv + ("messagesRecv" -> messagesRecv.get)
-    rv + ("messagesSent" -> messagesSent.get)
-    rv + ("kestrelGetTimeouts" -> kestrelGetTimeouts.get)
-    rv + ("protocolError" -> protocolError.get)
-    rv + ("sendCancelled" -> sendCancelled.get)
-    rv.readOnly
+    rv += ("bytesRecv" -> bytesRecv.get)
+    rv += ("bytesSent" -> bytesSent.get)
+    rv += ("messagesRecv" -> messagesRecv.get)
+    rv += ("messagesSent" -> messagesSent.get)
+    rv += ("kestrelGetTimeouts" -> kestrelGetTimeouts.get)
+    rv += ("protocolError" -> protocolError.get)
+    rv += ("sendCancelled" -> sendCancelled.get)
+    scala.collection.immutable.Map() ++ rv
   }
 }

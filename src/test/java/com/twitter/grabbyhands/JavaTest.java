@@ -23,16 +23,31 @@ import java.util.concurrent.TimeUnit;
 import java.util.HashMap;
 import java.util.List;
 import static org.junit.Assert.*;
-import org.junit.Test;
+import org.junit.*;
 
 public class JavaTest {
-  protected List<String> servers = Arrays.asList("localhost:22133");
+  protected String hostPort = "localhost:22133";
+  protected List<String> servers = Arrays.asList(hostPort);
   protected String queue = "grabby_javatest";
   protected List<String> queues = Arrays.asList(queue);
+  protected GrabbyHands grabbyHands = null;
+
+  @Before @After public void cleanup() {
+    if (grabbyHands != null) {
+      grabbyHands.join();
+      grabbyHands = null;
+    }
+    MetaRequest meta = new MetaRequest(hostPort);
+    meta.deleteQueue(queue);
+  }
 
   @Test public void testCreate() {
     Config config = new Config();
     config.addServers(servers);
+
+    assertFalse(config.getRecvTransactional());
+    assertFalse(config.getSendTransactional());
+    config.setRecvTransactional(true);
 
     config.setRecvNumConnections(4);
     config.setSendNumConnections(5);
@@ -40,6 +55,8 @@ public class JavaTest {
     assertEquals(config.getRecvNumConnections(), 4);
     assertEquals(config.sendNumConnections(), 5);
     assertEquals(config.getSendNumConnections(), 5);
+    assertTrue(config.getRecvTransactional());
+    assertFalse(config.getSendTransactional());
 
     config.setMaxMessageBytes(100);
     assertEquals(config.getMaxMessageBytes(), 100);
@@ -49,6 +66,7 @@ public class JavaTest {
     ConfigQueue configQueue = queueConfigs.get(queues.get(0));
     assertEquals(configQueue.recvNumConnections(), 4);
     assertEquals(configQueue.getRecvNumConnections(), 4);
+    assertTrue(configQueue.getRecvTransactional());
 
     assertEquals(configQueue.recvQueueDepth(), 4);
     assertEquals(configQueue.getRecvQueueDepth(), 4);
@@ -63,10 +81,11 @@ public class JavaTest {
   @Test public void testWriteRead() {
     Config config = new Config();
     config.addServers(servers);
+    config.setRecvTransactional(true);
     config.addQueues(queues);
-    GrabbyHands grabbyHands = new GrabbyHands(config);
+    grabbyHands = new GrabbyHands(config);
     BlockingQueue<Write> send = grabbyHands.getSendQueue(queue);
-    BlockingQueue<ByteBuffer> recv = grabbyHands.getRecvQueue(queue);
+    BlockingQueue<Read> recv = grabbyHands.getRecvTransQueue(queue);
 
     String sendText = "text";
     Write write = new Write(sendText);
@@ -74,13 +93,33 @@ public class JavaTest {
     assertFalse(write.cancelled());
     try {
       send.put(write);
-      ByteBuffer buffer = recv.poll(4, TimeUnit.SECONDS);
-      assertNotNull(buffer);
+      Read read = recv.poll(4, TimeUnit.SECONDS);
+      assertNotNull(read);
 
-      String recvText = new String(buffer.array());
+      String recvText = new String(read.getMessage().array());
       assertEquals(recvText, sendText);
+      assertTrue(read.open());
+      assertFalse(read.cancelled());
 
-      assertTrue(write.written());
+      send.put(new Write(read));
+      read.awaitComplete(4, TimeUnit.SECONDS);
+      assertFalse(read.open());
+      assertFalse(read.cancelled());
+
+      read = recv.poll(4, TimeUnit.SECONDS);
+      assertNotNull(read);
+      read.cancel();
+      assertFalse(read.open());
+      assertTrue(read.cancelled());
+
+      read = recv.poll(4, TimeUnit.SECONDS);
+      assertNotNull(read);
+      read.close();
+      assertFalse(read.open());
+      assertFalse(read.cancelled());
+
+      read = recv.poll(1, TimeUnit.SECONDS);
+      assertNull(read);
     } catch (InterruptedException e) {
       fail("caught unexpected exception");
     }

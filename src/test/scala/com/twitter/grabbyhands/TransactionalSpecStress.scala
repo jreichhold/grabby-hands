@@ -18,12 +18,13 @@ package com.twitter.grabbyhands
 import java.nio.ByteBuffer
 import java.util.concurrent.{BlockingQueue,TimeUnit}
 
-object BasicSpecStress extends SpecBase(50) {
+object TransactionalSpecStress extends SpecBase(50) {
 
-  def basicStress(testMessages:Int, testNumQueues: Int,
-                  testConnectionsPerServer: Int, testLength: Int, serial: Boolean) {
-    log.fine("testNumQueues " + testNumQueues + " testConnectionsPerServer " +
-             testConnectionsPerServer + " serial " + serial)
+  def transactionalStress(testMessages:Int, testNumQueues: Int,
+                          testConnectionsPerServer: Int, testLength: Int, serial: Boolean) {
+    log.fine(
+      "testNumQueues " + testNumQueues + " testConnectionsPerServer " + testConnectionsPerServer +
+      " serial " + serial)
     testMessages % testNumQueues must be_==(0)
     config = new Config()
     config.addServer(host + ":" + port)
@@ -31,17 +32,18 @@ object BasicSpecStress extends SpecBase(50) {
     config.sendQueueDepth = 225
     config.recvQueueDepth = 225
     config.reconnectHolddownMs = 50
+    config.recvTransactional = true
     testNumQueues must be_<=(numQueues)
     val testQueues = queues.slice(0, testNumQueues).toArray
     val queueConfig = config.addQueues(testQueues)
 
     ctor()
     grab must notBeNull
-    val recvQueues = new Array[BlockingQueue[ByteBuffer]](testNumQueues)
+    val recvQueues = new Array[BlockingQueue[Read]](testNumQueues)
     val sendQueues = new Array[BlockingQueue[Write]](testNumQueues)
     for (idx <- 0 to testNumQueues - 1) {
       log.warning("queue " + idx + " " + queues(idx))
-      recvQueues(idx) = grab.getRecvQueue(queues(idx))
+      recvQueues(idx) = grab.getRecvTransQueue(queues(idx))
       sendQueues(idx) = grab.getSendQueue(queues(idx))
     }
 
@@ -62,8 +64,9 @@ object BasicSpecStress extends SpecBase(50) {
     }
     var endMs = System.currentTimeMillis
     var deltaMs = endMs - startMs
-    log.info("enqueue " + testMessages + " in " + deltaMs + " ms, " +
-             ((1000*testMessages) / deltaMs) + " messages/sec")
+    log.info(
+      "enqueue " + testMessages + " in " + deltaMs + " ms, " + ((1000*testMessages) / deltaMs) +
+      " messages/sec")
 
     startMs = System.currentTimeMillis
     for (idx <- 1 to testMessages) {
@@ -71,14 +74,16 @@ object BasicSpecStress extends SpecBase(50) {
       queueIdx += 1
       if (queueIdx == testNumQueues) queueIdx = 0
       buffer must notBeNull
-      val recvTest = new String(buffer.array)
+      val recvTest = new String(buffer.message.array)
+      buffer.close()
       recvTest must be_==(sendText)
     }
     endMs = System.currentTimeMillis
     deltaMs = endMs- startMs
 
-    log.info("dequeue " + testMessages + " in " + deltaMs + " ms, " +
-             ((1000*testMessages) / deltaMs) + " messages/sec")
+    log.info(
+      "dequeue " + testMessages + " in " + deltaMs + " ms, " + ((1000*testMessages) / deltaMs) +
+      " messages/sec")
   }
 
   "basicstress" should {
@@ -99,35 +104,35 @@ object BasicSpecStress extends SpecBase(50) {
     }
 
     "many messages to one queue one connection serial" in {
-      basicStress(10000, 1, 1, 2048, true)
+      transactionalStress(10000, 1, 1, 2048, true)
     }
 
     "many messages to one queue one connection parallel" in {
-      basicStress(10000, 1, 1, 2048, false)
+      transactionalStress(10000, 1, 1, 2048, false)
     }
 
     "many messages to one queue many connections serial" in {
-      basicStress(10000, 1, 10, 2048, true)
+      transactionalStress(10000, 1, 10, 2048, true)
     }
 
     "many messages to one queue many connections parallel" in {
-      basicStress(10000, 1, 10, 2048, false)
+      transactionalStress(10000, 1, 10, 2048, false)
     }
 
     "many messages to many queues many connections serial" in {
-      basicStress(10000, 10, 10, 2048, true)
+      transactionalStress(10000, 10, 10, 2048, true)
     }
 
     "many messages to many queues many connections parallel" in {
-      basicStress(10000, 10, 10, 2048, false)
+      transactionalStress(10000, 10, 10, 2048, false)
     }
 
     "several large messages to one queue one server serial" in {
-      basicStress(5000, 1, 1, 32000, true)
+      transactionalStress(5000, 1, 1, 32000, true)
     }
 
     "several large messages to one queue one server parallel" in {
-      basicStress(5000, 1, 1, 32000, false)
+      transactionalStress(5000, 1, 1, 32000, false)
     }
   }
 }

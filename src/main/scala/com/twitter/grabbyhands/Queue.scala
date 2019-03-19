@@ -26,11 +26,15 @@ protected case class Queue(grabbyHands: GrabbyHands, config: ConfigQueue) {
   protected[grabbyhands] val counters = new QueueCounters()
   protected[grabbyhands] val recvQueue = new LinkedBlockingQueue[ByteBuffer](
     config.recvQueueDepth)
+  protected[grabbyhands] val transRecvQueue = new LinkedBlockingQueue[Read](
+    config.recvQueueDepth)
   protected[grabbyhands] val sendQueue = new LinkedBlockingQueue[Write](
     config.sendQueueDepth)
   val name = config.name
+  val transactional = config.getRecvTransactional()
+  log.fine("queue " + name + " transactional " + transactional)
 
-  log.fine("Connection threads starting")
+  log.fine("queue " + name + " connection threads starting")
   protected val connections: Array[ConnectionBase] = {
     val rv = new ArrayBuffer[ConnectionBase]()
     for (server <- grabbyHands.config.servers) {
@@ -53,7 +57,7 @@ protected case class Queue(grabbyHands: GrabbyHands, config: ConfigQueue) {
   }
 
   connections.foreach(connection => connection.started())
-  log.fine("All connection threads running")
+  log.fine("queueu " + name + " all connection threads running")
 
   def getCounters(): QueueCounters = {
     counters
@@ -81,7 +85,7 @@ protected [grabbyhands] object Queue {
   def factory(grabbyHands: GrabbyHands): Map[String, Queue] = {
     val rv = new HashMap[String, Queue]()
     grabbyHands.config.queues.values.foreach(
-      queue => rv + (queue.name -> new Queue(grabbyHands, queue)))
-    rv.readOnly
+      queue => rv += (queue.name -> new Queue(grabbyHands, queue)))
+    scala.collection.immutable.Map() ++ rv
   }
 }
